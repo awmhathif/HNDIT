@@ -1,0 +1,62 @@
+name: Verify HNDIT Learning Lab
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  web-projects:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Validate browser projects
+        run: |
+          python - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+
+          projects = sorted(Path('projects/web').glob('*/index.html'))
+          if len(projects) != 10:
+              raise SystemExit(f'Expected 10 web projects, found {len(projects)}')
+
+          class Parser(HTMLParser):
+              pass
+
+          for file in projects:
+              text = file.read_text(encoding='utf-8')
+              Parser().feed(text)
+              if '<title>' not in text.lower():
+                  raise SystemExit(f'Missing title in {file}')
+
+          print(f'Validated {len(projects)} browser projects.')
+          PY
+
+  csharp-projects:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build C# projects
+        shell: bash
+        run: |
+          mapfile -t projects < <(find projects/csharp -name '*.csproj' -type f | sort)
+          if [ "${#projects[@]}" -ne 3 ]; then
+            echo "Expected 3 C# projects, found ${#projects[@]}"
+            exit 1
+          fi
+          for project in "${projects[@]}"; do
+            echo "Building $project"
+            dotnet build "$project" --configuration Release --nologo
+          done
